@@ -7,7 +7,7 @@ const SEC={
 };
 let cur='flora';
 const $=id=>document.getElementById(id);
-let db,data={flora:[],fauna:[]},groupMode='family',viewMode='cards',currentPhoto='';
+let db,data={flora:[],fauna:[]},groupMode='family',viewMode='cards',currentPhotos=[];
 const recs=()=>data[cur];const store=()=>SEC[cur].store;
 const closedFamilies=new Set(),closedGenera=new Set(),closedDates=new Set();
 try{viewMode=localStorage.getItem('floraView')||'cards';groupMode=localStorage.getItem('floraGroup')||'family';cur=localStorage.getItem('floraSection')==='fauna'?'fauna':'flora';}catch{}
@@ -26,13 +26,18 @@ function fmtDate(d){if(!d)return'Date not recorded';const dt=new Date(d+'T00:00:
 function sciName(r){const g=(r.genus||'').trim(),s=(r.species||'').trim();return g&&s?g+' '+s:g?g+' sp.':s||'Unidentified';}
 const emptyLast=(a,b)=>!a?1:!b?-1:a.localeCompare(b);
 const byNewest=(a,b)=>(b.dateObserved||'').localeCompare(a.dateObserved||'')||sciName(a).localeCompare(sciName(b));
+const photosOf=r=>Array.isArray(r.photos)&&r.photos.length?r.photos:(r.photo?[r.photo]:[]);
+const MAX_PHOTOS=12;
 const commonLine=r=>[r.commonNameEn,r.commonNameAf].filter(Boolean).map(escapeHTML).join(' · ');
 const iconFor=()=>`<svg class="ico" viewBox="0 0 512 512" aria-hidden="true"><use href="${SEC[cur].icon}"/></svg>`;
 
 /* ---------- init ---------- */
 async function init(){
-  document.title=C.name;$('brandName').textContent=C.short;$('brandTag').textContent=C.tagline;$('heroTitle').innerHTML=C.hero;$('footerName').textContent=C.footer;$('footerNote').textContent=C.disclaimer;
-  db=await openDB();data.flora=await allRecords('observations');data.fauna=await allRecords('fauna');applySection();render();storageInfo();updateConnection();
+  document.title=C.name;$('brandName').textContent=C.short;$('brandTag').textContent=C.tagline;$('heroTitle').innerHTML=C.hero;$('footerName').textContent=C.footer;$('footerNote').textContent=C.disclaimer;if(C.copyright)$('copyright').textContent=C.copyright;
+  db=await openDB();data.flora=await allRecords('observations');data.fauna=await allRecords('fauna');await migratePhotos();applySection();render();storageInfo();updateConnection();
+}
+async function migratePhotos(){
+  for(const sec of Object.keys(SEC))for(const r of data[sec]){if(r.photo!==undefined&&!(Array.isArray(r.photos)&&r.photos.length&&!r.photo)){r.photos=photosOf(r);delete r.photo;await saveRecord(r,SEC[sec].store);}}
 }
 function updateConnection(){const on=navigator.onLine;$('connection').textContent=on?'Online · local log ready':'Offline · local log ready';$('dot').style.background=on?'#8ac69b':'#e2b65f';}
 addEventListener('online',updateConnection);addEventListener('offline',updateConnection);
@@ -58,7 +63,7 @@ $('tabFlora').onclick=()=>setSection('flora');$('tabFauna').onclick=()=>setSecti
 /* ---------- rendering ---------- */
 function cardHTML(r){
   return `<article class="obs-card" data-id="${r.id}" tabindex="0" role="button" aria-label="Edit ${escapeHTML(sciName(r))}">
-  <div class="obs-image">${r.photo?`<img src="${r.photo}" alt="${escapeHTML(sciName(r))}" loading="lazy">`:iconFor()}</div>
+  <div class="obs-image">${photosOf(r).length?`<img src="${photosOf(r)[0]}" alt="${escapeHTML(sciName(r))}" loading="lazy">`:iconFor()}${photosOf(r).length>1?`<span class="photobadge">&#128247; ${photosOf(r).length}</span>`:''}</div>
   <div class="obs-body"><h3>${escapeHTML(sciName(r))}</h3>
   ${commonLine(r)?`<div class="common">${commonLine(r)}</div>`:''}
   <div class="obs-meta">${fmtDate(r.dateObserved)}${r.family?' · '+escapeHTML(r.family):''}</div>
@@ -69,7 +74,7 @@ function cardHTML(r){
 }
 function rowHTML(r){
   return `<div class="obs-row" data-id="${r.id}" tabindex="0" role="button" aria-label="Edit ${escapeHTML(sciName(r))}">
-  <div class="row-thumb">${r.photo?`<img src="${r.photo}" alt="" loading="lazy">`:iconFor()}</div>
+  <div class="row-thumb">${photosOf(r).length?`<img src="${photosOf(r)[0]}" alt="" loading="lazy">`:iconFor()}</div>
   <div class="row-main"><strong>${escapeHTML(sciName(r))}</strong>${commonLine(r)?`<span class="common">${commonLine(r)}</span>`:''}
   <span class="row-sub">${fmtDate(r.dateObserved)}${r.floweringSeason?' · ✿ '+escapeHTML(r.floweringSeason):''}${r.locality?' · '+escapeHTML(r.locality.replace(/\s+/g,' ')):''}</span></div>
   <button class="smallbtn" type="button" data-edit="${r.id}">Edit</button></div>`;
@@ -102,7 +107,7 @@ function render(){
   $('familyCount').textContent=families.length;
   $('genusCount').textContent=new Set(records.map(r=>norm(r.genus)).filter(Boolean)).size;
   $('speciesCount').textContent=new Set(records.filter(r=>r.species).map(r=>norm(r.genus+' '+r.species))).size;
-  $('photoCount').textContent=records.filter(r=>r.photo).length;
+  $('photoCount').textContent=records.reduce((n,r)=>n+photosOf(r).length,0);
   const filtering=!!(q||fam||gen);
   if(!filtered.length){$('obsGrid').innerHTML=`<div class="empty">${records.length?'No matching observations. Try another search or filter.':`No ${SEC[cur].noun} observations yet. Tap “Add ${SEC[cur].noun} observation” to record your first one.`}</div>`;return;}
   if(groupMode==='date'){
@@ -143,13 +148,67 @@ $('groupDate').onclick=()=>{groupMode='date';setPref('floraGroup',groupMode);ren
 $('search').oninput=render;$('familyFilter').onchange=render;$('genusFilter').onchange=render;
 
 /* ---------- add / edit form ---------- */
-function setPhotoPreview(src){
-  currentPhoto=src||'';
-  const img=$('photoPreview');
-  if(src){img.src=src;img.classList.remove('hidden');$('photoEmpty').classList.add('hidden');}
-  else{img.removeAttribute('src');img.classList.add('hidden');$('photoEmpty').classList.remove('hidden');}
-  $('removePhoto').classList.toggle('hidden',!src);
+function renderPhotos(){
+  const n=currentPhotos.length;
+  $('photoGrid').innerHTML=currentPhotos.map((src,i)=>`<div class="thumb"><img src="${src}" alt="Photograph ${i+1}" data-view="${i}"><button type="button" class="thumbdel" data-del="${i}" aria-label="Delete photograph ${i+1}">&times;</button></div>`).join('');
+  $('photoEmpty').classList.toggle('hidden',n>0);
+  $('removeAllPhotos').classList.toggle('hidden',n<2);
+  $('photoCountLabel').textContent=n?`(${n})`:'';
 }
+$('photoGrid').addEventListener('click',e=>{
+  const del=e.target.closest('[data-del]'),view=e.target.closest('[data-view]');
+  if(del){if(confirm('Delete this photograph?')){currentPhotos.splice(+del.dataset.del,1);renderPhotos();}}
+  else if(view){$('photoLarge').src=currentPhotos[+view.dataset.view];$('photoDialog').showModal();}
+});
+$('removeAllPhotos').onclick=()=>{if(confirm('Delete all '+currentPhotos.length+' photographs from this observation?')){currentPhotos=[];renderPhotos();}};
+$('closePhoto').onclick=()=>$('photoDialog').close();
+$('photoDialog').addEventListener('click',e=>{if(e.target===$('photoDialog'))$('photoDialog').close();});
+async function addFiles(files){
+  let failed=0;
+  for(const f of files){
+    if(currentPhotos.length>=MAX_PHOTOS){alert(`Up to ${MAX_PHOTOS} photographs can be kept per observation.`);break;}
+    try{currentPhotos.push(await fileToDataURL(f));renderPhotos();}catch{failed++;}
+  }
+  if(failed)alert(failed+' image(s) could not be read. Please try another photograph.');
+}
+$('photo').onchange=async e=>{const fs=[...e.target.files];e.target.value='';await addFiles(fs);};
+$('camNative').onchange=async e=>{const fs=[...e.target.files];e.target.value='';await addFiles(fs);if(fs.length){$('cameraDialog').close();}};
+
+/* ---------- in-app camera (opens the phone or laptop camera directly) ---------- */
+let camStream=null,camFacing='environment',camShots=0;
+function stopCamera(){if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null;}const v=$('camVideo');v.srcObject=null;$('camShoot').disabled=true;}
+function showCamErr(msg){const e=$('camErr');e.textContent=msg;e.classList.remove('hidden');$('camFallback').classList.remove('hidden');$('camShoot').disabled=true;}
+async function startCamera(){
+  stopCamera();$('camErr').classList.add('hidden');$('camFallback').classList.add('hidden');
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){showCamErr('The live camera is not available here (it needs a secure https link). Use the button below to open your camera app instead.');return;}
+  try{
+    camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:camFacing},width:{ideal:1920},height:{ideal:1440}},audio:false});
+    const v=$('camVideo');v.srcObject=camStream;await v.play().catch(()=>{});
+    const front=(camStream.getVideoTracks()[0].getSettings().facingMode||camFacing)==='user';
+    v.classList.toggle('mirror',front);
+    $('camShoot').disabled=false;
+    const cams=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');
+    $('camSwitch').classList.toggle('hidden',cams.length<2);
+  }catch(err){
+    const n=err&&err.name;
+    showCamErr(n==='NotAllowedError'||n==='SecurityError'?'Camera permission was blocked. Tap the lock icon next to the web address, allow Camera for this site, then tap Take photo again. Or use the button below.':n==='NotFoundError'||n==='OverconstrainedError'?'No camera was found on this device. You can pick a photo instead.':'The camera could not be started. Use the button below to open your camera app instead.');
+  }
+}
+$('takePhoto').onclick=()=>{
+  if(currentPhotos.length>=MAX_PHOTOS){alert(`Up to ${MAX_PHOTOS} photographs can be kept per observation.`);return;}
+  camShots=0;$('camCount').textContent='0';$('cameraDialog').showModal();startCamera();
+};
+$('camShoot').onclick=()=>{
+  const v=$('camVideo');if(!v.videoWidth)return;
+  if(currentPhotos.length>=MAX_PHOTOS){alert(`Up to ${MAX_PHOTOS} photographs can be kept per observation.`);return;}
+  const s=Math.min(1,1400/Math.max(v.videoWidth,v.videoHeight)),c=document.createElement('canvas');
+  c.width=Math.round(v.videoWidth*s);c.height=Math.round(v.videoHeight*s);c.getContext('2d').drawImage(v,0,0,c.width,c.height);
+  currentPhotos.push(c.toDataURL('image/jpeg',.82));renderPhotos();camShots++;$('camCount').textContent=camShots;
+  const st=document.querySelector('.camstage');st.classList.add('flash');setTimeout(()=>st.classList.remove('flash'),180);
+};
+$('camSwitch').onclick=()=>{camFacing=camFacing==='environment'?'user':'environment';startCamera();};
+$('camDone').onclick=$('camClose').onclick=()=>$('cameraDialog').close();
+$('cameraDialog').addEventListener('close',stopCamera);
 function refreshLists(){
   const records=recs();
   const opt=a=>a.map(v=>`<option value="${escapeHTML(v)}">`).join('');
@@ -188,14 +247,12 @@ function openForm(r){
   $('dateObserved').value=r?r.dateObserved||'':todayISO();
   $('commonNameEn').value=r?.commonNameEn||'';$('commonNameAf').value=r?.commonNameAf||'';
   $('locality').value=r?.locality||'';$('floweringSeason').value=r?.floweringSeason||'';$('notes').value=r?.notes||'';
-  $('photo').value='';setPhotoPreview(r?.photo||'');
+  $('photo').value='';currentPhotos=[...photosOf(r||{})];renderPhotos();
   refreshLists();
   $('recordDialog').showModal();
 }
 $('addRecord').onclick=()=>openForm();
 $('closeDialog').onclick=$('cancelDialog').onclick=()=>$('recordDialog').close();
-$('photo').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{setPhotoPreview(await fileToDataURL(f));}catch{alert('That image could not be read. Please try another photograph.');}};
-$('removePhoto').onclick=()=>{$('photo').value='';setPhotoPreview('');};
 function fileToDataURL(file){return new Promise((resolve,reject)=>{const r=new FileReader();r.onerror=()=>reject(r.error);r.onload=()=>{const img=new Image();img.onerror=()=>reject(new Error('bad image'));img.onload=()=>{const s=Math.min(1,1400/Math.max(img.width,img.height)),c=document.createElement('canvas');c.width=Math.round(img.width*s);c.height=Math.round(img.height*s);c.getContext('2d').drawImage(img,0,0,c.width,c.height);resolve(c.toDataURL('image/jpeg',.82));};img.src=r.result;};r.readAsDataURL(file);});}
 $('useGps').onclick=()=>{
   const msg=$('gpsMsg');
@@ -212,7 +269,7 @@ $('recordForm').onsubmit=async e=>{
   if(!genus&&!species){alert('Please enter at least a genus or a species.');$('genus').focus();return;}
   const id=$('recordId').value||crypto.randomUUID();
   const prev=recs().find(r=>r.id===id)||{};
-  const rec={id,family:$('family').value.trim(),genus,species,commonNameEn:$('commonNameEn').value.trim(),commonNameAf:$('commonNameAf').value.trim(),dateObserved:$('dateObserved').value,locality:$('locality').value.trim(),notes:$('notes').value.trim(),photo:currentPhoto,createdAt:prev.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};
+  const rec={id,family:$('family').value.trim(),genus,species,commonNameEn:$('commonNameEn').value.trim(),commonNameAf:$('commonNameAf').value.trim(),dateObserved:$('dateObserved').value,locality:$('locality').value.trim(),notes:$('notes').value.trim(),photos:[...currentPhotos],createdAt:prev.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};
   if(SEC[cur].season)rec.floweringSeason=$('floweringSeason').value.trim();
   try{await saveRecord(rec);}catch(err){alert('Could not save. The device storage may be full.');return;}
   data[cur]=await allRecords();$('recordDialog').close();render();toast('Observation saved');
@@ -242,7 +299,7 @@ async function importInto(sec,rows){
   let added=0,updated=0,skipped=0;
   for(const r of rows){
     if(!r||(!(r.genus||'').trim()&&!(r.species||'').trim())){skipped++;continue;}
-    const rec={id:r.id||crypto.randomUUID(),family:(r.family||'').trim(),genus:(r.genus||'').trim(),species:(r.species||'').trim(),commonNameEn:(r.commonNameEn||'').trim(),commonNameAf:(r.commonNameAf||'').trim(),dateObserved:r.dateObserved||'',locality:r.locality||'',notes:r.notes||'',photo:r.photo||'',createdAt:r.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};
+    const rec={id:r.id||crypto.randomUUID(),family:(r.family||'').trim(),genus:(r.genus||'').trim(),species:(r.species||'').trim(),commonNameEn:(r.commonNameEn||'').trim(),commonNameAf:(r.commonNameAf||'').trim(),dateObserved:r.dateObserved||'',locality:r.locality||'',notes:r.notes||'',photos:photosOf(r),createdAt:r.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};
     if(SEC[sec].season)rec.floweringSeason=r.floweringSeason||'';
     if(ids.has(rec.id)){await saveRecord(rec,st);updated++;continue;}
     if(have.has(recKey(rec))){skipped++;continue;}
@@ -305,6 +362,23 @@ function toast(msg,undo){
   $('toastUndo').onclick=async()=>{$('toast').classList.add('hidden');await undo();};
   clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.add('hidden'),undo?8000:3500);
 }
+
+/* ---------- Android back button closes the open window instead of leaving the app ---------- */
+let dlgPushed=false;
+$('recordDialog').addEventListener('close',()=>{if(dlgPushed){dlgPushed=false;history.back();}});
+const _showModal=$('recordDialog').showModal.bind($('recordDialog'));
+$('recordDialog').showModal=()=>{_showModal();if(!dlgPushed){history.pushState({dlg:1},'');dlgPushed=true;}};
+addEventListener('popstate',()=>{
+  if($('cameraDialog').open){$('cameraDialog').close();history.pushState({dlg:1},'');dlgPushed=true;return;}
+  if($('photoDialog').open){$('photoDialog').close();history.pushState({dlg:1},'');dlgPushed=true;return;}
+  if(dlgPushed){dlgPushed=false;if($('recordDialog').open)$('recordDialog').close();}
+});
+
+/* ---------- install button (Chrome / Edge on laptop, Chrome on Android) ---------- */
+let installEvt=null;
+addEventListener('beforeinstallprompt',e=>{e.preventDefault();installEvt=e;$('installApp').classList.remove('hidden');});
+addEventListener('appinstalled',()=>{installEvt=null;$('installApp').classList.add('hidden');toast('App installed');});
+$('installApp').onclick=async()=>{if(!installEvt)return;installEvt.prompt();await installEvt.userChoice.catch(()=>{});installEvt=null;$('installApp').classList.add('hidden');};
 
 /* ---------- offline support + updates ---------- */
 if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost')){

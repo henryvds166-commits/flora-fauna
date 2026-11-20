@@ -1,5 +1,5 @@
 /* Offline support: caches the app files so it opens without internet. Bump VERSION when you change any file. */
-const VERSION='flora-observations-v3';
+const VERSION='flora-observations-v6';
 const SHELL=['./','index.html','styles.css','app.js','config.js','manifest.webmanifest','icon.svg','icon-192.png','icon-512.png','icon-maskable-512.png'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(VERSION).then(c=>c.addAll(SHELL)));});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==VERSION).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});

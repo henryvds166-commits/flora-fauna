@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Flora &amp; Fauna Observations</title>
 <meta name="description" content="Offline-first field log for flora and fauna observations">
+<meta name="author" content="Henry van der Schyff">
 <meta name="theme-color" content="#183d32">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -22,7 +23,7 @@
   <svg class="ico brandmark" viewBox="0 0 512 512" aria-hidden="true"><use href="#i-app"/></svg>
   <div><h1 id="brandName">Flora &amp; Fauna</h1><p id="brandTag">OFFLINE FIELD LOG</p></div>
  </div>
- <div class="status"><i class="dot" id="dot"></i><span id="connection">Local log ready</span></div>
+ <div class="status"><button class="btn installbtn hidden" id="installApp" type="button">&#11015; Install app</button><i class="dot" id="dot"></i><span id="connection">Local log ready</span></div>
 </header>
 
 <main>
@@ -34,7 +35,7 @@
   <div>
    <p class="eyebrow">FIELD OBSERVATIONS</p>
    <h2 id="heroTitle">Your field observations,<br>wherever you go.</h2>
-   <p class="sub">Record the plants and animals you find in the field, with date, place, notes and a photograph. Everything is stored on this device and works without internet.</p>
+   <p class="sub">Record the plants and animals you find in the field, with date, place, notes and photographs. Everything is stored on this device and works without internet.</p>
   </div>
   <svg class="ico hero-flower" viewBox="0 0 512 512" aria-hidden="true"><use href="#i-app"/></svg>
  </section>
@@ -74,11 +75,11 @@
   <div class="management">
    <article class="manage-card"><span class="manage-icon">&#8681;</span><div><h3>Export</h3><p>Download all flora and fauna observations, including photographs, as one backup file. The CSV contains the section you are viewing (<strong id="csvSection">flora</strong>) as text only.</p><button class="btn secondary" id="exportData" type="button">Export JSON</button> <button class="btn secondary" id="exportCsv" type="button">Export CSV</button></div></article>
    <article class="manage-card"><span class="manage-icon">&#8679;</span><div><h3>Import</h3><p>Restore a JSON backup (both sections), or import a CSV into the section you are viewing. CSV columns: family, genus, species, dateObserved, locality, floweringSeason (flora only) and notes.</p><label class="btn secondary filebutton">Choose file<input id="importFile" type="file" accept=".json,.csv,application/json,text/csv"></label></div></article>
-   <article class="manage-card"><span class="manage-icon">&#9741;</span><div><h3>Storage</h3><p>Observations are kept in this browser on this device only.</p><span class="storage-label" id="storageInfo">Checking storage...</span></div></article>
+   <article class="manage-card"><span class="manage-icon">&#9741;</span><div><h3>Storage</h3><p>Observations are kept in this browser on this device only. Works on laptops and Android phones: use Export on one device and Import on the other to move your records.</p><span class="storage-label" id="storageInfo">Checking storage...</span></div></article>
   </div>
  </section>
 
- <footer><span id="footerName">Flora Observations</span><span id="footerNote">Independent project</span></footer>
+ <footer><span id="footerName">Flora &amp; Fauna Observations</span><span id="footerNote">Independent project</span><small class="copyright" id="copyright">&copy; 2026 Henry van der Schyff. All rights reserved.</small></footer>
 </main>
 
 <dialog id="recordDialog">
@@ -99,9 +100,15 @@
    <label class="wide" id="seasonField">Flowering season / month<input id="floweringSeason" list="seasonList" placeholder="e.g. August to October"></label>
    <label class="wide">Research notes<textarea id="notes" rows="4" placeholder=""></textarea></label>
    <div class="wide photofield">
-    <span class="label">Photograph</span>
-    <div class="photobox"><img id="photoPreview" class="hidden" alt="Photograph preview"><span class="photoempty" id="photoEmpty">No photograph</span></div>
-    <div class="photobtns"><label class="btn secondary filebutton">Choose or take photo<input id="photo" type="file" accept="image/*"></label><button type="button" class="btn secondary hidden" id="removePhoto">Remove photo</button></div>
+    <span class="label">Photographs <small id="photoCountLabel"></small></span>
+    <div class="photogrid" id="photoGrid"></div>
+    <div class="photoempty" id="photoEmpty">No photographs yet</div>
+    <div class="photobtns">
+     <button type="button" class="btn secondary" id="takePhoto">&#128247; Take photo</button>
+     <label class="btn secondary filebutton">&#128444; Add photos<input id="photo" type="file" accept="image/*" multiple></label>
+     <button type="button" class="btn danger hidden" id="removeAllPhotos">Delete all photos</button>
+    </div>
+    <small class="photohint">Tap a photo to enlarge it, or &times; to delete it. Photo changes are kept when you press Save.</small>
    </div>
   </div>
   <datalist id="familyList"></datalist><datalist id="genusList"></datalist><datalist id="speciesList"></datalist>
@@ -114,6 +121,19 @@
   </div>
  </form>
 </dialog>
+
+<dialog id="cameraDialog" class="cameradlg">
+ <div class="camhead"><strong>Take photo</strong><button type="button" class="close" id="camClose" aria-label="Close camera">&times;</button></div>
+ <div class="camstage"><video id="camVideo" playsinline muted autoplay></video><div class="camerr hidden" id="camErr"></div></div>
+ <div class="camfallback hidden" id="camFallback"><label class="btn secondary filebutton">Open my camera app instead<input id="camNative" type="file" accept="image/*" capture="environment"></label></div>
+ <div class="camactions">
+  <button type="button" class="btn secondary hidden" id="camSwitch">&#8635; Switch camera</button>
+  <button type="button" class="btn primary camshutter" id="camShoot" disabled>&#9679; Capture</button>
+  <button type="button" class="btn secondary" id="camDone">Done (<span id="camCount">0</span>)</button>
+ </div>
+</dialog>
+
+<dialog id="photoDialog" class="lightbox"><button type="button" class="close lightclose" id="closePhoto" aria-label="Close photo">&times;</button><img id="photoLarge" alt="Photograph"></dialog>
 
 <div class="toast hidden" id="toast" role="status"><span id="toastMsg"></span><button id="toastUndo" class="hidden" type="button">Undo</button></div>
 
