@@ -9,6 +9,7 @@ let cur='flora';
 const $=id=>document.getElementById(id);
 let db,data={flora:[],fauna:[]},groupMode='family',viewMode='cards',currentPhotos=[];
 const recs=()=>data[cur];const store=()=>SEC[cur].store;
+let onlyMissing=false;
 const closedFamilies=new Set(),closedGenera=new Set(),closedDates=new Set();
 try{viewMode=localStorage.getItem('floraView')||'cards';groupMode=localStorage.getItem('floraGroup')||'family';cur=localStorage.getItem('floraSection')==='fauna'?'fauna':'flora';}catch{}
 
@@ -23,12 +24,14 @@ const escapeHTML=(s='')=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;
 const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
 const todayISO=()=>new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
 function fmtDate(d){if(!d)return'Date not recorded';const dt=new Date(d+'T00:00:00');return isNaN(dt)?escapeHTML(d):dt.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});}
-function sciName(r){const g=(r.genus||'').trim(),s=(r.species||'').trim();return g&&s?g+' '+s:g?g+' sp.':s||'Unidentified';}
+const isUnid=r=>!(r.genus||'').trim()&&!(r.species||'').trim();
+function sciName(r){const g=(r.genus||'').trim(),s=(r.species||'').trim();return g&&s?g+' '+s:g?g+' sp.':s||(r.commonNameEn||'').trim()||(r.commonNameAf||'').trim()||'Unidentified';}
 const emptyLast=(a,b)=>!a?1:!b?-1:a.localeCompare(b);
 const byNewest=(a,b)=>(b.dateObserved||'').localeCompare(a.dateObserved||'')||sciName(a).localeCompare(sciName(b));
 const photosOf=r=>Array.isArray(r.photos)&&r.photos.length?r.photos:(r.photo?[r.photo]:[]);
 const MAX_PHOTOS=12;
-const commonLine=r=>[r.commonNameEn,r.commonNameAf].filter(Boolean).map(escapeHTML).join(' · ');
+const commonLine=r=>{const en=(r.commonNameEn||'').trim(),af=(r.commonNameAf||'').trim();const l=isUnid(r)?(en?[af]:[]):[en,af];return l.filter(Boolean).map(escapeHTML).join(' · ');};
+const pendingTag=r=>isUnid(r)?'<span class="tag pending">&#9998; Scientific name to be added</span>':'';
 const iconFor=()=>`<svg class="ico" viewBox="0 0 512 512" aria-hidden="true"><use href="${SEC[cur].icon}"/></svg>`;
 
 /* ---------- init ---------- */
@@ -55,7 +58,7 @@ function applySection(){
 function setSection(name){
   if(name===cur)return;cur=name;setPref('floraSection',cur);
   $('search').value='';$('familyFilter').value='';$('genusFilter').value='';
-  closedFamilies.clear();closedGenera.clear();closedDates.clear();
+  onlyMissing=false;closedFamilies.clear();closedGenera.clear();closedDates.clear();
   applySection();render();
 }
 $('tabFlora').onclick=()=>setSection('flora');$('tabFauna').onclick=()=>setSection('fauna');
@@ -64,10 +67,10 @@ $('tabFlora').onclick=()=>setSection('flora');$('tabFauna').onclick=()=>setSecti
 function cardHTML(r){
   return `<article class="obs-card" data-id="${r.id}" tabindex="0" role="button" aria-label="Edit ${escapeHTML(sciName(r))}">
   <div class="obs-image">${photosOf(r).length?`<img src="${photosOf(r)[0]}" alt="${escapeHTML(sciName(r))}" loading="lazy">`:iconFor()}${photosOf(r).length>1?`<span class="photobadge">&#128247; ${photosOf(r).length}</span>`:''}</div>
-  <div class="obs-body"><h3>${escapeHTML(sciName(r))}</h3>
+  <div class="obs-body"><h3${isUnid(r)?' class="unid"':''}>${escapeHTML(sciName(r))}</h3>
   ${commonLine(r)?`<div class="common">${commonLine(r)}</div>`:''}
   <div class="obs-meta">${fmtDate(r.dateObserved)}${r.family?' · '+escapeHTML(r.family):''}</div>
-  ${r.floweringSeason?`<span class="tag">✿ ${escapeHTML(r.floweringSeason)}</span>`:''}
+  ${pendingTag(r)}${r.floweringSeason?`<span class="tag">✿ ${escapeHTML(r.floweringSeason)}</span>`:''}
   ${r.locality?`<div class="obs-note">${escapeHTML(r.locality)}</div>`:''}
   ${r.notes?`<div class="obs-note"><em>${escapeHTML(r.notes)}</em></div>`:''}
   <div class="card-actions"><button class="smallbtn" type="button" data-edit="${r.id}">Edit</button></div></div></article>`;
@@ -75,8 +78,8 @@ function cardHTML(r){
 function rowHTML(r){
   return `<div class="obs-row" data-id="${r.id}" tabindex="0" role="button" aria-label="Edit ${escapeHTML(sciName(r))}">
   <div class="row-thumb">${photosOf(r).length?`<img src="${photosOf(r)[0]}" alt="" loading="lazy">`:iconFor()}</div>
-  <div class="row-main"><strong>${escapeHTML(sciName(r))}</strong>${commonLine(r)?`<span class="common">${commonLine(r)}</span>`:''}
-  <span class="row-sub">${fmtDate(r.dateObserved)}${r.floweringSeason?' · ✿ '+escapeHTML(r.floweringSeason):''}${r.locality?' · '+escapeHTML(r.locality.replace(/\s+/g,' ')):''}</span></div>
+  <div class="row-main"><strong${isUnid(r)?' class="unid"':''}>${escapeHTML(sciName(r))}</strong>${commonLine(r)?`<span class="common">${commonLine(r)}</span>`:''}
+  <span class="row-sub">${isUnid(r)?'✎ Scientific name to be added · ':''}${fmtDate(r.dateObserved)}${r.floweringSeason?' · ✿ '+escapeHTML(r.floweringSeason):''}${r.locality?' · '+escapeHTML(r.locality.replace(/\s+/g,' ')):''}</span></div>
   <button class="smallbtn" type="button" data-edit="${r.id}">Edit</button></div>`;
 }
 const itemsHTML=list=>list.length?`<div class="${viewMode==='cards'?'obs-grid':'obs-list'}">${list.map(viewMode==='cards'?cardHTML:rowHTML).join('')}</div>`:'';
@@ -101,14 +104,16 @@ function render(){
   const gen=$('genusFilter').value;
   const filtered=records.filter(r=>{
     const hay=[r.commonNameEn,r.commonNameAf,r.family,r.genus,r.species,sciName(r),r.dateObserved,r.locality,r.floweringSeason,r.notes].join(' ').toLowerCase();
-    return(!q||hay.includes(q))&&(!fam||r.family===fam)&&(!gen||r.genus===gen);
+    return(!q||hay.includes(q))&&(!fam||r.family===fam)&&(!gen||r.genus===gen)&&(!onlyMissing||isUnid(r));
   });
+  const missing=records.filter(isUnid).length;
+  $('missingCount').textContent=missing;$('missingFilter').classList.toggle('hidden',!missing&&!onlyMissing);$('missingFilter').classList.toggle('on',onlyMissing);
   $('obsCount').textContent=records.length;
   $('familyCount').textContent=families.length;
   $('genusCount').textContent=new Set(records.map(r=>norm(r.genus)).filter(Boolean)).size;
   $('speciesCount').textContent=new Set(records.filter(r=>r.species).map(r=>norm(r.genus+' '+r.species))).size;
   $('photoCount').textContent=records.reduce((n,r)=>n+photosOf(r).length,0);
-  const filtering=!!(q||fam||gen);
+  const filtering=!!(q||fam||gen||onlyMissing);
   if(!filtered.length){$('obsGrid').innerHTML=`<div class="empty">${records.length?'No matching observations. Try another search or filter.':`No ${SEC[cur].noun} observations yet. Tap “Add ${SEC[cur].noun} observation” to record your first one.`}</div>`;return;}
   if(groupMode==='date'){
     const by=new Map();
@@ -145,6 +150,7 @@ $('viewCards').onclick=()=>{viewMode='cards';setPref('floraView',viewMode);rende
 $('viewList').onclick=()=>{viewMode='list';setPref('floraView',viewMode);render();};
 $('groupFamily').onclick=()=>{groupMode='family';setPref('floraGroup',groupMode);render();};
 $('groupDate').onclick=()=>{groupMode='date';setPref('floraGroup',groupMode);render();};
+$('missingFilter').onclick=()=>{onlyMissing=!onlyMissing;render();};
 $('search').oninput=render;$('familyFilter').onchange=render;$('genusFilter').onchange=render;
 
 /* ---------- add / edit form ---------- */
@@ -236,6 +242,17 @@ function suggestCommon(){
   if(!$('commonNameEn').value.trim()&&hit.commonNameEn)$('commonNameEn').value=hit.commonNameEn;
   if(!$('commonNameAf').value.trim()&&hit.commonNameAf)$('commonNameAf').value=hit.commonNameAf;
 }
+function suggestScientific(field){
+  const v=norm($(field).value);if(!v||$('genus').value.trim()||$('species').value.trim())return;
+  const hit=[...recs()].filter(r=>!isUnid(r)&&norm(r[field])===v).sort(byNewest)[0];
+  if(!hit)return;
+  $('genus').value=hit.genus||'';$('species').value=hit.species||'';
+  if(!$('family').value.trim()&&hit.family)$('family').value=hit.family;
+  const other=field==='commonNameEn'?'commonNameAf':'commonNameEn';
+  if(!$(other).value.trim()&&hit[other])$(other).value=hit[other];
+  refreshLists();
+}
+$('commonNameEn').addEventListener('change',()=>suggestScientific('commonNameEn'));$('commonNameAf').addEventListener('change',()=>suggestScientific('commonNameAf'));
 $('species').addEventListener('change',suggestCommon);$('species').addEventListener('blur',suggestCommon);
 $('family').addEventListener('input',()=>{$('family').dataset.auto='';refreshLists();});
 function openForm(r){
@@ -266,7 +283,8 @@ $('useGps').onclick=()=>{
 $('recordForm').onsubmit=async e=>{
   e.preventDefault();
   const genus=$('genus').value.trim(),species=$('species').value.trim();
-  if(!genus&&!species){alert('Please enter at least a genus or a species.');$('genus').focus();return;}
+  const cEn=$('commonNameEn').value.trim(),cAf=$('commonNameAf').value.trim();
+  if(!genus&&!species&&!cEn&&!cAf){alert('Please enter at least one name: a common name, or a genus / species. The scientific name can be added later.');$('commonNameEn').focus();return;}
   const id=$('recordId').value||crypto.randomUUID();
   const prev=recs().find(r=>r.id===id)||{};
   const rec={id,family:$('family').value.trim(),genus,species,commonNameEn:$('commonNameEn').value.trim(),commonNameAf:$('commonNameAf').value.trim(),dateObserved:$('dateObserved').value,locality:$('locality').value.trim(),notes:$('notes').value.trim(),photos:[...currentPhotos],createdAt:prev.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};
@@ -292,13 +310,13 @@ $('exportCsv').onclick=()=>{
   toast('Exported '+SEC[cur].noun+' as CSV (photographs are only included in the JSON backup)');
 };
 function parseCSV(s){s=s.replace(/^\uFEFF/,'');const rows=[];let row=[],v='',q=false;for(let i=0;i<s.length;i++){const c=s[i];if(q){if(c==='"'&&s[i+1]==='"'){v+='"';i++;}else if(c==='"')q=false;else v+=c;}else if(c==='"')q=true;else if(c===','){row.push(v);v='';}else if(c==='\n'||c==='\r'){if(c==='\r'&&s[i+1]==='\n')i++;row.push(v);rows.push(row);row=[];v='';}else v+=c;}if(v!==''||row.length){row.push(v);rows.push(row);}const head=(rows.shift()||[]).map(h=>h.trim());return rows.filter(r=>r.some(x=>x.trim())).map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||'').trim()])));}
-const recKey=r=>norm((r.genus||'')+' '+(r.species||''))+'|'+(r.dateObserved||'')+'|'+norm(r.locality);
+const recKey=r=>norm((r.genus||'')+' '+(r.species||'')+' '+(r.commonNameEn||'')+' '+(r.commonNameAf||''))+'|'+(r.dateObserved||'')+'|'+norm(r.locality);
 async function importInto(sec,rows){
   const st=SEC[sec].store,existing=data[sec];
   const have=new Set(existing.map(recKey)),ids=new Set(existing.map(r=>r.id));
   let added=0,updated=0,skipped=0;
   for(const r of rows){
-    if(!r||(!(r.genus||'').trim()&&!(r.species||'').trim())){skipped++;continue;}
+    if(!r||(!(r.genus||'').trim()&&!(r.species||'').trim()&&!(r.commonNameEn||'').trim()&&!(r.commonNameAf||'').trim())){skipped++;continue;}
     const rec={id:r.id||crypto.randomUUID(),family:(r.family||'').trim(),genus:(r.genus||'').trim(),species:(r.species||'').trim(),commonNameEn:(r.commonNameEn||'').trim(),commonNameAf:(r.commonNameAf||'').trim(),dateObserved:r.dateObserved||'',locality:r.locality||'',notes:r.notes||'',photos:photosOf(r),createdAt:r.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};
     if(SEC[sec].season)rec.floweringSeason=r.floweringSeason||'';
     if(ids.has(rec.id)){await saveRecord(rec,st);updated++;continue;}

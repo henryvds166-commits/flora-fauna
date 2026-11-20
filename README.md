@@ -8,6 +8,9 @@ An installable, offline-first web app with two sections, **Flora** and **Fauna**
 
 Switch sections with the **Flora / Fauna** tabs. Tap an observation to edit it. **Save** and **Delete** are in the edit window (a deleted observation can be undone for a few seconds). "Add my GPS position" adds coordinates to the locality field.
 
+## Saving with only a common name
+You only need **one name** to save an observation: a common name (English or Afrikaans), or a genus / species. If you only know the common name, save it now and add the family, genus and species later by opening the observation. Observations without a scientific name show a "Scientific name to be added" tag, and a **Needs scientific name** button lists just those. If you type a common name you have used before, the scientific name is filled in for you.
+
 ## Using it
 - Browse **by family** (family → genus → observations) or **by date** (newest first), as cards or a list. Search and filter by family or genus.
 - Family, genus and species suggestions come from your own earlier observations in that section, and the family fills in automatically for a genus you have used before.

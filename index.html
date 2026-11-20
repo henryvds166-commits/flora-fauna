@@ -64,6 +64,7 @@
   <div class="controls">
    <div class="seg" role="group" aria-label="Group by"><button id="groupFamily" type="button" class="active">By family</button><button id="groupDate" type="button">By date</button></div>
    <div class="seg" role="group" aria-label="View"><button id="viewCards" type="button" class="active">Cards</button><button id="viewList" type="button">List</button></div>
+   <button class="smallbtn hidden" id="missingFilter" type="button">Needs scientific name (<span id="missingCount">0</span>)</button>
    <button class="smallbtn" id="expandAll" type="button">Expand all</button>
    <button class="smallbtn" id="collapseAll" type="button">Collapse all</button>
   </div>
@@ -86,13 +87,14 @@
  <form id="recordForm" autocomplete="off">
   <div class="dialoghead"><h2 id="dialogTitle">Add observation</h2><button type="button" class="close" id="closeDialog" aria-label="Close">&times;</button></div>
   <input type="hidden" id="recordId">
+  <p class="formhint">You only need one name to save: a common name, or a genus / species. The scientific name can be added later.</p>
   <div class="formgrid">
+   <label>Common name (English)<input id="commonNameEn" placeholder=""></label>
+   <label>Common name (Afrikaans)<input id="commonNameAf" placeholder=""></label>
    <label>Family<input id="family" list="familyList" placeholder=""></label>
    <label>Genus<input id="genus" list="genusList" placeholder=""></label>
    <label>Species<input id="species" list="speciesList" placeholder=""></label>
    <label>Date observed<input id="dateObserved" type="date"></label>
-   <label>Common name (English)<input id="commonNameEn" placeholder=""></label>
-   <label>Common name (Afrikaans)<input id="commonNameAf" placeholder=""></label>
    <label class="wide">Locality / specimen details
     <textarea id="locality" rows="3" placeholder=""></textarea>
     <span class="inline-actions"><button type="button" class="smallbtn" id="useGps">&#128205; Add my GPS position</button><small id="gpsMsg"></small></span>
